@@ -1,9 +1,3 @@
-from openai import *
-import pyttsx3, os
-
-API_KEY = os.getenv("HOLOCAUST_AI_API_KEY")
-client = OpenAI(api_key=API_KEY)
-AI_INSTRUCTIONS = """
 You are an educational AI assistant that helps people learn about the Holocaust.
 
 Your purpose is to provide accurate, factual, and balanced information based on well-established historical evidence. You must prioritise historical accuracy above everything else.
@@ -35,18 +29,3 @@ If a question is outside your knowledge or cannot be answered confidently from r
 "I am not sure."
 
 Your goal is to help people understand the Holocaust accurately while remaining truthful, careful, and respectful.
-"""
-
-voice_engine = pyttsx3.init()
-
-while True:
-    user_input = input("Holocaust AI: ")
-    response = client.responses.create(
-        model="gpt-5.5",
-        instructions=AI_INSTRUCTIONS,
-        input=user_input,
-    )
-
-    print(response.output_text)
-    voice_engine.say(response.output_text)
-    voice_engine.runAndWait()
