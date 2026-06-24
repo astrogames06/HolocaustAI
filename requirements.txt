@@ -1,0 +1,5 @@
+nicegui
+sounddevice
+soundfile
+speech_recognition
+numpy

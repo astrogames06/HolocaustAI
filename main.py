@@ -52,6 +52,8 @@ fs = 44100
 audio_folder = "saved_audios"
 os.makedirs(audio_folder, exist_ok=True)
 
+recording_lock = threading.Lock()
+
 with ui.row().classes('items-center'):
     ui.icon('smart_toy', size="50px")
     ui.label('Holocaust AI').classes('text-h3')
@@ -63,8 +65,10 @@ def audio_speak(text):
 
 def audio_callback(indata, frames, time, status):
     global audio_data, recording
-    if recording:
-        audio_data.append(indata.copy())
+
+    with recording_lock:
+        if recording:
+            audio_data.append(indata.copy())
 
 
 async def start_recording():
@@ -75,7 +79,9 @@ async def start_recording():
     await asyncio.sleep(0.05)
 
     audio_data = []
-    recording = True
+
+    with recording_lock:
+        recording = True
 
     stream = sd.InputStream(
         samplerate=fs,
@@ -91,7 +97,8 @@ async def stop_recording():
     ai_text.text = "Processing..."
     ai_text.update()
 
-    recording = False
+    with recording_lock:
+        recording = False
 
     if stream is not None:
         stream.stop()
@@ -151,11 +158,12 @@ record_btn = ui.button("Record", icon="mic")
 def toggle_recording():
     global recording
     if not recording:
-        asyncio.create_task(start_recording())
         record_btn.text = "Stop"
+        asyncio.create_task(start_recording())
     else:
-        asyncio.create_task(stop_recording())
         record_btn.text = "Record"
+        asyncio.create_task(stop_recording())
+        
 record_btn.on("click", toggle_recording)
 
 ui.run()
