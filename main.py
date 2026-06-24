@@ -1,5 +1,11 @@
 from openai import *
-import pyttsx3, os
+import pyttsx3, os, asyncio, threading
+import sounddevice as sd
+import soundfile as sf
+import speech_recognition as sr
+from pathlib import Path
+from nicegui import ui
+import numpy as np
 
 API_KEY = os.getenv("HOLOCAUST_AI_API_KEY")
 client = OpenAI(api_key=API_KEY)
@@ -39,14 +45,111 @@ Your goal is to help people understand the Holocaust accurately while remaining 
 
 voice_engine = pyttsx3.init()
 
-while True:
-    user_input = input("Holocaust AI: ")
-    response = client.responses.create(
-        model="gpt-5.5",
-        instructions=AI_INSTRUCTIONS,
-        input=user_input,
-    )
+recording = False
+audio_data = []
+stream = None
 
-    print(response.output_text)
-    voice_engine.say(response.output_text)
-    voice_engine.runAndWait()
+audio_folder = "saved_audios"
+os.makedirs(audio_folder, exist_ok=True)
+
+with ui.row().classes('items-center'):
+    ui.icon('smart_toy', size="50px")
+    ui.label('Holocaust AI').classes('text-h3')
+ai_text = ui.label('Ask the AI!').classes('text-h6') # Display of ai output
+
+audio_text = ""
+fs = 44100
+
+def audio_callback(indata, frames, time, status):
+    global audio_data, recording
+    if recording:
+        audio_data.append(indata.copy())
+
+async def start_recording():
+    global recording, audio_data, stream
+
+    print("Recording...")
+    ai_text.text = "Recording..."
+    ai_text.update()
+    await asyncio.sleep(0.05)
+
+    audio_data = []
+    recording = True
+
+    stream = sd.InputStream(
+        samplerate=fs,
+        channels=1,
+        callback=audio_callback
+    )
+    stream.start()
+
+    await asyncio.sleep(0.1)
+
+async def stop_recording():
+    global recording, stream, audio_data, audio_text
+
+    print("Stopping...")
+    recording = False
+
+    stream.stop()
+    stream.close()
+
+    if len(audio_data) == 0:
+        print("No audio captured")
+        ai_text.text = "No audio detected"
+        ai_text.update()
+        return
+
+    import numpy as np
+    audio = np.concatenate(audio_data, axis=0)
+
+    sf.write("audio.wav", audio, fs)
+    files = os.listdir(audio_folder)
+    audio_count = len(files)
+
+    file_path = f"{audio_folder}/{audio_count + 1}.wav"
+    sf.write(file_path, audio, fs)
+
+    r = sr.Recognizer()
+    audio_text = "I wasn't able to get that"
+
+    with sr.AudioFile("audio.wav") as source:
+        audio_file = r.record(source)
+
+    try:
+        audio_text = r.recognize_google(audio_file)
+    except:
+        pass
+
+    print("Text:", audio_text)
+
+    ai_text.text = "AI Thinking..."
+    ai_text.update()
+
+    asyncio.create_task(run_ai(audio_text))
+
+async def run_ai(audio_text):
+    ai_text.text = "AI Thinking..."
+    ai_text.update()
+    await asyncio.sleep(0.05)
+
+    ai_response = "I wasn't able to get that"
+    if audio_text != "I wasn't able to get that":
+        response = client.responses.create(
+            model="gpt-5.5",
+            instructions=AI_INSTRUCTIONS,
+            input=audio_text,
+        )
+
+        ai_response = response.output_text
+
+    threading.Thread(target=lambda: voice_engine.say(ai_response) or voice_engine.runAndWait()).start()
+
+    ai_text.text = ai_response
+    ai_text.update()
+
+ui.button("Hold to Record", icon="mic") \
+    .on("mousedown", start_recording) \
+    .on("mouseup", stop_recording)
+
+ui.run()
